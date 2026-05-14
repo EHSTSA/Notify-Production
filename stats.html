@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Notify - Stats</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    #statsPage { padding: 20px 16px 40px; }
+    .shell { max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+
+    .filter-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .filter-bar .label { font-size: 0.72rem; color: var(--text-muted); letter-spacing: 0.08em; text-transform: uppercase; margin-right: 4px; }
+    .export-btn { margin-left: auto; background: transparent; border: 1px solid var(--border); color: var(--text-muted); padding: 6px 16px; border-radius: 8px; cursor: pointer; font-family: 'DM Sans', sans-serif; font-size: 0.8rem; display: flex; align-items: center; gap: 6px; transition: all 0.15s; }
+    .export-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .export-btn svg { width: 13px; height: 13px; }
+
+    #loadingState, #emptyState { text-align: center; padding: 80px 0; color: var(--text-muted); font-size: 0.9rem; }
+    #loadingState::before { content: ''; display: block; width: 32px; height: 32px; margin: 0 auto 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .kpi-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+    .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; position: relative; overflow: hidden; box-shadow: var(--shadow); }
+    .kpi::before { content: ''; position: absolute; inset: 0; opacity: 0.04; background: radial-gradient(circle at 80% 20%, var(--accent-color, var(--accent)), transparent 60%); }
+    .kpi-value { font-size: 2rem; font-weight: 700; line-height: 1; margin-bottom: 6px; color: var(--accent-color, var(--accent)); }
+    .kpi-label { font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; }
+
+    .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .chart-grid.full { grid-template-columns: 1fr; }
+    @media (max-width: 700px) { .chart-grid { grid-template-columns: 1fr; } }
+
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); }
+    .card-title { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); margin-bottom: 16px; font-weight: 600; }
+
+    .heatmap-grid { display: grid; grid-template-columns: 36px repeat(24, 1fr); gap: 3px; align-items: center; }
+    .heatmap-day-label { font-size: 0.65rem; color: var(--text-muted); text-align: right; padding-right: 6px; }
+    .heatmap-hour-labels { display: grid; grid-template-columns: 36px repeat(24, 1fr); gap: 3px; margin-bottom: 6px; }
+    .heatmap-hour-label { font-size: 0.6rem; color: var(--text-muted); text-align: center; }
+    .heatmap-cell { aspect-ratio: 1; border-radius: 3px; background: var(--border); }
+
+    .summary-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    .summary-table th { text-align: left; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); padding: 8px 12px; border-bottom: 1px solid var(--border); font-weight: 500; }
+    .summary-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); color: var(--text); }
+    .summary-table tr:last-child td { border-bottom: none; }
+    .summary-table tr:hover td { background: var(--surface-2); }
+    .sound-pill { display: inline-flex; align-items: center; gap: 6px; }
+    .sound-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  </style>
+  <script>
+    if (localStorage.getItem("audio-detector-theme") === "dark") document.documentElement.classList.add("dark-init");
+  </script>
+</head>
+<body>
+<script>
+  if (localStorage.getItem("audio-detector-theme") === "dark") document.body.classList.add("dark");
+</script>
+
+<div id="statsPage">
+<div class="shell">
+
+  <div class="header">
+    <h1>Notify</h1>
+    <div class="header-actions">
+      <nav class="top-nav" aria-label="Primary">
+        <a class="top-nav-link" href="index.html">Detector</a>
+        <a class="top-nav-link active" href="stats.html">Stats</a>
+      </nav>
+      <label class="toggle-wrap">
+        Dark
+        <label class="toggle">
+          <input type="checkbox" id="darkSetting">
+          <span class="toggle-slider"></span>
+        </label>
+      </label>
+    </div>
+  </div>
+
+  <div class="user-bar">
+    <span class="user-bar-email" id="userEmail"></span>
+    <button class="btn-sign-out" id="signOutBtn">Sign out</button>
+  </div>
+
+  <div class="filter-bar">
+    <span class="label">Period</span>
+    <button class="filter-btn" data-days="1">1d</button>
+    <button class="filter-btn active" data-days="7">7d</button>
+    <button class="filter-btn" data-days="30">30d</button>
+    <button class="filter-btn" data-days="90">90d</button>
+    <button class="export-btn" id="exportCsvBtn">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M8 2v8M5 7l3 3 3-3M3 12h10"/>
+      </svg>
+      Export CSV
+    </button>
+  </div>
+
+  <div id="loadingState">Loading detections…</div>
+  <div id="emptyState" hidden>No detections in this period.</div>
+
+  <div id="statsContent" hidden>
+    <div class="kpi-strip" id="kpiStrip"></div>
+
+    <div class="chart-grid">
+      <div class="card">
+        <div class="card-title">Detections over time</div>
+        <div style="position:relative;height:220px"><canvas id="timelineChart"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">By sound type</div>
+        <div style="position:relative;height:220px"><canvas id="donutChart"></canvas></div>
+      </div>
+    </div>
+
+    <div class="chart-grid full">
+      <div class="card">
+        <div class="card-title">Confidence over time</div>
+        <div style="position:relative;height:200px"><canvas id="scatterChart"></canvas></div>
+      </div>
+    </div>
+
+    <div class="chart-grid full">
+      <div class="card">
+        <div class="card-title">Activity heatmap — hour of day × day of week</div>
+        <div id="heatmapContainer"></div>
+      </div>
+    </div>
+
+    <div class="chart-grid full">
+      <div class="card">
+        <div class="card-title">Sound summary</div>
+        <table class="summary-table">
+          <thead>
+            <tr>
+              <th>Sound</th>
+              <th>Count</th>
+              <th>Peak hour</th>
+              <th>Last detected</th>
+            </tr>
+          </thead>
+          <tbody id="summaryTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<!-- Chart.js + date adapter (required for scatter time axis) -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+
+<script>
+  const darkToggle = document.getElementById("darkSetting");
+  darkToggle.checked = localStorage.getItem("audio-detector-theme") === "dark";
+  darkToggle.onchange = () => {
+    document.body.classList.toggle("dark", darkToggle.checked);
+    localStorage.setItem("audio-detector-theme", darkToggle.checked ? "dark" : "light");
+  };
+</script>
+
+<script type="module" src="stats.js"></script>
+</body>
+</html>
